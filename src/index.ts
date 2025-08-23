@@ -13,7 +13,7 @@ const config: WatsonConfig = {
   host: process.env.HOST || '0.0.0.0',
   log_level: process.env.LOG_LEVEL || 'info',
   
-  context_manager_url: process.env.CONTEXT_MANAGER_URL || 'http://localhost:3001',
+  context_manager_url: process.env.CONTEXT_MANAGER_URL || 'http://localhost:3005',
   atlas_url: process.env.ATLAS_URL || 'http://localhost:3003',
   phoenix_url: process.env.PHOENIX_URL,
   sherlock_url: process.env.SHERLOCK_URL,
@@ -27,7 +27,7 @@ const config: WatsonConfig = {
   enable_websockets: process.env.ENABLE_WEBSOCKETS !== 'false',
   websocket_heartbeat_interval: parseInt(process.env.WEBSOCKET_HEARTBEAT_INTERVAL || '30000'),
   
-  jwt_secret: process.env.JWT_SECRET || 'watson-development-secret-key',
+  jwt_secret: process.env.JWT_SECRET || 'controlvector-auth-development-secret-key',
   enable_cors: process.env.ENABLE_CORS !== 'false',
   allowed_origins: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000']
 }
