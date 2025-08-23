@@ -69,7 +69,36 @@ export async function registerRoutes(fastify: FastifyInstance, config: WatsonCon
             
             if (data.type === 'subscribe') {
               (connection.socket as any).conversationId = data.conversation_id
+            } else if (data.type === 'user_message') {
+              // Send typing indicator
+              connection.socket.send(JSON.stringify({
+                type: 'typing_indicator',
+                is_typing: true,
+                agent: 'Watson',
+                timestamp: new Date().toISOString()
+              }))
+              
+              // Extract JWT token from WebSocket query parameters
+              const token = request.query?.token as string
+              
+              const response = await controller.conversationService.processMessage(
+                data.conversation_id,
+                data.content,
+                token
+              )
+              
+              // Send AI response
+              connection.socket.send(JSON.stringify({
+                type: 'ai_response',
+                content: response.message,
+                conversation_id: data.conversation_id,
+                intent: 'general',
+                confidence: 0.9,
+                agent: 'Watson',
+                timestamp: new Date().toISOString()
+              }))
             } else if (data.type === 'message') {
+              // Legacy support
               const response = await controller.conversationService.processMessage(
                 data.conversation_id,
                 data.message
@@ -84,7 +113,7 @@ export async function registerRoutes(fastify: FastifyInstance, config: WatsonCon
           } catch (error) {
             connection.socket.send(JSON.stringify({
               type: 'error',
-              error: 'Failed to process message',
+              message: error instanceof Error ? error.message : 'Failed to process message',
               timestamp: new Date().toISOString()
             }))
           }

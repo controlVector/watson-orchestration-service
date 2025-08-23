@@ -64,7 +64,7 @@ export class ConversationService extends EventEmitter {
     return conversation
   }
 
-  async processMessage(conversationId: string, userInput: string): Promise<WatsonResponse> {
+  async processMessage(conversationId: string, userInput: string, jwtToken?: string): Promise<WatsonResponse> {
     const conversation = this.conversations.get(conversationId)
     if (!conversation) {
       throw new Error(`Conversation ${conversationId} not found`)
@@ -88,7 +88,7 @@ export class ConversationService extends EventEmitter {
     conversation.messages.push(userMessage)
     conversation.last_activity_at = timestamp
 
-    const infrastructureContext = await this.getInfrastructureContext(conversation.workspace_id)
+    const infrastructureContext = await this.getInfrastructureContext(conversation.workspace_id, conversation.user_id, jwtToken) 
     
     userMessage.infrastructure_context = infrastructureContext
 
@@ -568,10 +568,34 @@ export class ConversationService extends EventEmitter {
     }
   }
 
-  private async getInfrastructureContext(workspaceId: string): Promise<InfrastructureContext> {
+  private async getInfrastructureContext(workspaceId: string, userId?: string, jwtToken?: string): Promise<InfrastructureContext> {
     try {
-      const response = await axios.get(`${this.config.atlas_url}/api/infrastructure`, {
-        params: { workspace_id: workspaceId }
+      console.log(`[Watson] Getting infrastructure context for workspace ${workspaceId}, user ${userId}`)
+      
+      const headers: any = {}
+      if (jwtToken) {
+        headers.Authorization = `Bearer ${jwtToken}`
+        console.log(`[Watson] Using JWT token: ${jwtToken.substring(0, 50)}...`)
+        
+        // Decode and check expiration
+        try {
+          const payload = JSON.parse(Buffer.from(jwtToken.split('.')[1], 'base64').toString())
+          const now = Math.floor(Date.now() / 1000)
+          const expiresIn = payload.exp - now
+          console.log(`[Watson] JWT expires in: ${expiresIn} seconds (${Math.floor(expiresIn / 60)} minutes)`)
+          if (expiresIn <= 0) {
+            console.error(`[Watson] JWT token is expired!`)
+          }
+        } catch (decodeError) {
+          console.error(`[Watson] Failed to decode JWT:`, decodeError)
+        }
+      } else {
+        console.warn(`[Watson] No JWT token provided for Atlas call`)
+      }
+
+      const response = await axios.get(`${this.config.atlas_url}/api/v1/infrastructure`, {
+        params: { workspace_id: workspaceId },
+        headers
       })
 
       return {
