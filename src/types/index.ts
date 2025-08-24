@@ -18,6 +18,9 @@ export interface ConversationMessage {
   
   // Infrastructure context
   infrastructure_context?: InfrastructureContext
+  
+  // Authentication token for MCP calls
+  jwt_token?: string
 }
 
 export interface Conversation {
@@ -407,6 +410,13 @@ export interface WatsonResponse {
   
   // Context for follow-up
   context_updates?: any
+  
+  // LLM usage tracking
+  usage?: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+  }
   
   // User interface hints
   ui_hints?: UIHint[]
