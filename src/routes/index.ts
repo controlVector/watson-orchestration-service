@@ -78,7 +78,7 @@ export async function registerRoutes(fastify: FastifyInstance, config: WatsonCon
               connection.socket.send(JSON.stringify({
                 type: 'typing_indicator',
                 is_typing: true,
-                agent: 'Watson',
+                agent: 'Victor',
                 timestamp: new Date().toISOString()
               }))
               
@@ -98,7 +98,7 @@ export async function registerRoutes(fastify: FastifyInstance, config: WatsonCon
                 conversation_id: data.conversation_id,
                 intent: 'general',
                 confidence: 0.9,
-                agent: 'Watson',
+                agent: 'Victor',
                 timestamp: new Date().toISOString()
               }))
             } else if (data.type === 'message') {
