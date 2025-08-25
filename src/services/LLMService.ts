@@ -147,6 +147,57 @@ export class LLMService {
       console.error('[LLM] Failed to get Context Manager tools:', error)
     }
 
+    // Get Mercury repository analysis tools
+    try {
+      const mercuryTools = await this.mcpService.getMercuryTools()
+      for (const tool of mercuryTools) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: `mercury_${tool.name}`,
+            description: `[Mercury] ${tool.description}`,
+            parameters: tool.inputSchema
+          }
+        })
+      }
+    } catch (error) {
+      console.error('[LLM] Failed to get Mercury tools:', error)
+    }
+
+    // Get Neptune DNS management tools
+    try {
+      const neptuneTools = await this.mcpService.getNeptuneTools()
+      for (const tool of neptuneTools) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: `neptune_${tool.name}`,
+            description: `[Neptune] ${tool.description}`,
+            parameters: tool.inputSchema
+          }
+        })
+      }
+    } catch (error) {
+      console.error('[LLM] Failed to get Neptune tools:', error)
+    }
+
+    // Get Hermes SSH management tools
+    try {
+      const hermesTools = await this.mcpService.getHermesTools()
+      for (const tool of hermesTools) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: `hermes_${tool.name}`,
+            description: `[Hermes] ${tool.description}`,
+            parameters: tool.inputSchema
+          }
+        })
+      }
+    } catch (error) {
+      console.error('[LLM] Failed to get Hermes tools:', error)
+    }
+
     return tools
   }
 
@@ -442,7 +493,79 @@ export class LLMService {
           results.push(result)
         } else if (name.startsWith('context_')) {
           const toolName = name.substring(8) // Remove 'context_' prefix
+          
+          // Auto-inject workspace_id, jwt_token, and user_id for tools that require it
+          if (workspaceId && jwtToken && ['list_user_secrets', 'get_user_context', 'store_credential', 'retrieve_credential'].includes(toolName)) {
+            args.workspace_id = workspaceId
+            args.jwt_token = jwtToken
+            
+            // Extract user_id from JWT token
+            try {
+              const payload = JSON.parse(Buffer.from(jwtToken.split('.')[1], 'base64').toString())
+              args.user_id = payload.user_id
+            } catch (error) {
+              console.error('[LLM] Failed to extract user_id from JWT for context tool:', error)
+            }
+          }
+          
           const result = await this.mcpService.callContextTool({ name: toolName, arguments: args }, jwtToken)
+          results.push(result)
+        } else if (name.startsWith('mercury_')) {
+          const toolName = name.substring(8) // Remove 'mercury_' prefix
+          
+          // Auto-inject workspace_id, jwt_token, and user_id for Mercury tools
+          if (workspaceId && jwtToken) {
+            args.workspace_id = workspaceId
+            args.jwt_token = jwtToken
+            
+            // Extract user_id from JWT token
+            try {
+              const payload = JSON.parse(Buffer.from(jwtToken.split('.')[1], 'base64').toString())
+              args.user_id = payload.user_id
+            } catch (error) {
+              console.error('[LLM] Failed to extract user_id from JWT for Mercury tool:', error)
+            }
+          }
+          
+          const result = await this.mcpService.callMercuryTool({ name: toolName, arguments: args }, jwtToken)
+          results.push(result)
+        } else if (name.startsWith('neptune_')) {
+          const toolName = name.substring(8) // Remove 'neptune_' prefix
+          
+          // Auto-inject workspace_id, jwt_token, and user_id for Neptune tools
+          if (workspaceId && jwtToken) {
+            args.workspace_id = workspaceId
+            args.jwt_token = jwtToken
+            
+            // Extract user_id from JWT token
+            try {
+              const payload = JSON.parse(Buffer.from(jwtToken.split('.')[1], 'base64').toString())
+              args.user_id = payload.user_id
+            } catch (error) {
+              console.error('[LLM] Failed to extract user_id from JWT for Neptune tool:', error)
+            }
+          }
+          
+          const result = await this.mcpService.callNeptuneTool({ name: toolName, arguments: args }, jwtToken)
+          results.push(result)
+        } else if (name.startsWith('hermes_')) {
+          const toolName = name.substring(7) // Remove 'hermes_' prefix
+          
+          // Auto-inject workspace_id, jwt_token, and user_id for Hermes tools
+          if (workspaceId && jwtToken) {
+            args.workspace_id = workspaceId
+            args.jwt_token = jwtToken
+            
+            // Extract user_id from JWT token
+            try {
+              const payload = JSON.parse(Buffer.from(jwtToken.split('.')[1], 'base64').toString())
+              args.user_id = payload.user_id
+            } catch (error) {
+              console.error('[LLM] Failed to extract user_id from JWT for Hermes tool:', error)
+            }
+          }
+          
+          const result = await this.mcpService.callHermesTool({ name: toolName, arguments: args }, jwtToken)
           results.push(result)
         } else {
           results.push({ success: false, error: `Unknown tool: ${name}` })
@@ -463,26 +586,55 @@ export class LLMService {
    * Create system message for infrastructure management context
    */
   createSystemMessage(workspaceId?: string, userContext?: any): string {
-    return `You are Watson, an AI infrastructure orchestration assistant for the ControlVector platform.
+    return `You are Victor, an AI infrastructure orchestration assistant for the ControlVector platform.
 
 Your role is to help users manage their cloud infrastructure through natural conversation. You have access to various tools that can:
 
 - Get infrastructure overview and status
 - Provision new infrastructure resources
 - Estimate costs for infrastructure
-- Scale existing resources  
+- Scale existing resources
 - Monitor and troubleshoot issues
 - Provide recommendations for optimization
+- Access stored user credentials from Context Manager
+- Analyze repositories for deployment planning
+- Configure DNS records and SSL certificates
+- Manage SSH keys for secure server access
+
+CRITICAL: CREDENTIAL HANDLING PROTOCOL
+Before asking users for ANY credentials, you MUST:
+1. First check stored credentials using context_list_user_secrets
+2. Look for GitHub tokens, DigitalOcean API keys, DNS provider credentials, SSH keys
+3. Only ask for missing credentials after confirming they aren't already stored
+4. When users mention they've "already provided" credentials, check the Context Manager
+
+DEPLOYMENT WORKFLOW:
+For deployment requests:
+1. Check stored credentials FIRST (context_list_user_secrets)
+2. Analyze repository with Mercury tools (mercury_analyze_repository)
+3. Check infrastructure capabilities with Atlas tools
+4. Plan deployment with available credentials
+5. Configure DNS with Neptune tools if domain is requested
+6. Only ask for missing pieces after checking everything
 
 Key guidelines:
-1. Always use the available tools to get real data rather than making assumptions
-2. Be proactive in calling multiple tools when needed to provide comprehensive answers
-3. Explain what you're doing and why when using tools
-4. Provide actionable insights and recommendations
-5. Handle errors gracefully and suggest alternatives
+1. Always check stored credentials BEFORE asking users to provide them
+2. Use context_list_user_secrets to see what credentials are available
+3. Be proactive in calling multiple tools when needed to provide comprehensive answers
+4. Explain what you're doing and why when using tools
+5. Provide actionable insights and recommendations
+6. Handle errors gracefully and suggest alternatives
+7. Remember that users have gone through onboarding and likely have credentials stored
 
 ${workspaceId ? `Current workspace: ${workspaceId}` : ''}
 
-Available tools will be provided as function calls. Use them intelligently to help users achieve their infrastructure goals.`
+Available tools span multiple services:
+- Atlas: Infrastructure provisioning and management
+- Context Manager: Credential storage and retrieval
+- Mercury: Repository analysis and deployment planning
+- Neptune: DNS management and SSL configuration
+- Hermes: SSH key generation and management
+
+Use these tools intelligently to help users achieve their infrastructure goals without asking for credentials they've already provided.`
   }
 }
