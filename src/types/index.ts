@@ -93,6 +93,9 @@ export type IntentType =
   | 'get_recommendations'     // "What do you recommend for high traffic?"
   | 'manage_costs'           // "Reduce my costs"
   | 'security_review'        // "Check security of my infrastructure"
+  | 'manage_dns'             // "Add DNS record for mydomain.com"
+  | 'verify_dns'             // "Check if DNS has propagated"
+  | 'setup_ssl_dns'          // "Set up SSL DNS validation"
   | 'general_question'       // General infrastructure questions
   | 'greeting'              // Hello, hi, etc.
   | 'unknown'               // Couldn't determine intent
@@ -531,6 +534,9 @@ export interface WatsonConfig {
   // Agent endpoints
   context_manager_url: string
   atlas_url: string
+  neptune_url?: string
+  mercury_url: string
+  hermes_url: string
   phoenix_url?: string
   sherlock_url?: string
   

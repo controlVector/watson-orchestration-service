@@ -31,6 +31,9 @@ export class MCPService {
   private config: WatsonConfig
   private atlasClient: any
   private contextClient: any
+  private neptuneClient: any
+  private mercuryClient: any
+  private hermesClient: any
 
   constructor(config: WatsonConfig) {
     this.config = config
@@ -44,6 +47,24 @@ export class MCPService {
 
     this.contextClient = axios.create({
       baseURL: `${config.context_manager_url}/api/v1/mcp`,
+      timeout: 30000,
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+    this.neptuneClient = axios.create({
+      baseURL: `${config.neptune_url || 'http://localhost:3006'}/api/v1/mcp`,
+      timeout: 30000,
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+    this.mercuryClient = axios.create({
+      baseURL: `${config.mercury_url || 'http://localhost:3007'}/api/v1/mcp`,
+      timeout: 30000,
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+    this.hermesClient = axios.create({
+      baseURL: `${config.hermes_url || 'http://localhost:3008'}/api/v1/mcp`,
       timeout: 30000,
       headers: { 'Content-Type': 'application/json' }
     })
@@ -71,6 +92,45 @@ export class MCPService {
       return response.data.tools || []
     } catch (error) {
       console.error('[MCP] Failed to get Context Manager tools:', error)
+      return []
+    }
+  }
+
+  /**
+   * Get available MCP tools from Neptune DNS service
+   */
+  async getNeptuneTools(): Promise<MCPTool[]> {
+    try {
+      const response = await this.neptuneClient.get('/tools')
+      return response.data.tools || []
+    } catch (error) {
+      console.error('[MCP] Failed to get Neptune tools:', error)
+      return []
+    }
+  }
+
+  /**
+   * Get available MCP tools from Mercury repository analysis service
+   */
+  async getMercuryTools(): Promise<MCPTool[]> {
+    try {
+      const response = await this.mercuryClient.get('/tools')
+      return response.data.tools || []
+    } catch (error) {
+      console.error('[MCP] Failed to get Mercury tools:', error)
+      return []
+    }
+  }
+
+  /**
+   * Get available MCP tools from Hermes SSH key management service
+   */
+  async getHermesTools(): Promise<MCPTool[]> {
+    try {
+      const response = await this.hermesClient.get('/tools')
+      return response.data.tools || []
+    } catch (error) {
+      console.error('[MCP] Failed to get Hermes tools:', error)
       return []
     }
   }
@@ -127,6 +187,96 @@ export class MCPService {
       }
     } catch (error: any) {
       console.error(`[MCP] Context Manager tool call failed:`, error.response?.data || error.message)
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Unknown error',
+        tool_name: toolCall.name
+      }
+    }
+  }
+
+  /**
+   * Call a Neptune DNS MCP tool
+   */
+  async callNeptuneTool(toolCall: MCPToolCall, jwtToken?: string): Promise<MCPToolResult> {
+    try {
+      const headers: any = { 'Content-Type': 'application/json' }
+      if (jwtToken) {
+        headers.Authorization = `Bearer ${jwtToken}`
+      }
+
+      console.log(`[MCP] Calling Neptune DNS tool: ${toolCall.name}`)
+      const response = await this.neptuneClient.post('/call', toolCall, { headers })
+      
+      return {
+        success: response.data.success || false,
+        result: response.data.result,
+        error: response.data.error,
+        tool_name: toolCall.name,
+        execution_time: response.data.execution_time
+      }
+    } catch (error: any) {
+      console.error(`[MCP] Neptune tool call failed:`, error.response?.data || error.message)
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Unknown error',
+        tool_name: toolCall.name
+      }
+    }
+  }
+
+  /**
+   * Call a Mercury repository analysis MCP tool
+   */
+  async callMercuryTool(toolCall: MCPToolCall, jwtToken?: string): Promise<MCPToolResult> {
+    try {
+      const headers: any = { 'Content-Type': 'application/json' }
+      if (jwtToken) {
+        headers.Authorization = `Bearer ${jwtToken}`
+      }
+
+      console.log(`[MCP] Calling Mercury repository analysis tool: ${toolCall.name}`)
+      const response = await this.mercuryClient.post('/call', toolCall, { headers })
+      
+      return {
+        success: response.data.success || false,
+        result: response.data.result,
+        error: response.data.error,
+        tool_name: toolCall.name,
+        execution_time: response.data.execution_time
+      }
+    } catch (error: any) {
+      console.error(`[MCP] Mercury tool call failed:`, error.response?.data || error.message)
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Unknown error',
+        tool_name: toolCall.name
+      }
+    }
+  }
+
+  /**
+   * Call a Hermes SSH key management MCP tool
+   */
+  async callHermesTool(toolCall: MCPToolCall, jwtToken?: string): Promise<MCPToolResult> {
+    try {
+      const headers: any = { 'Content-Type': 'application/json' }
+      if (jwtToken) {
+        headers.Authorization = `Bearer ${jwtToken}`
+      }
+
+      console.log(`[MCP] Calling Hermes SSH management tool: ${toolCall.name}`)
+      const response = await this.hermesClient.post('/call', toolCall, { headers })
+      
+      return {
+        success: response.data.success || false,
+        result: response.data.result,
+        error: response.data.error,
+        tool_name: toolCall.name,
+        execution_time: response.data.execution_time
+      }
+    } catch (error: any) {
+      console.error(`[MCP] Hermes tool call failed:`, error.response?.data || error.message)
       return {
         success: false,
         error: error.response?.data?.message || error.message || 'Unknown error',
@@ -260,14 +410,263 @@ export class MCPService {
   }
 
   /**
+   * Create DNS record using Neptune MCP tools
+   */
+  async createDNSRecord(domain: string, recordType: string, name: string, content: string, provider: string, workspaceId: string, userId: string, jwtToken?: string): Promise<MCPToolResult> {
+    return await this.callNeptuneTool({
+      name: 'neptune_create_dns_record',
+      arguments: {
+        domain,
+        record_type: recordType,
+        name,
+        content,
+        provider,
+        workspace_id: workspaceId,
+        user_id: userId,
+        jwt_token: jwtToken
+      }
+    }, jwtToken)
+  }
+
+  /**
+   * Verify DNS propagation using Neptune MCP tools
+   */
+  async verifyDNSPropagation(domain: string, recordType: string, expectedValue: string, workspaceId: string, userId: string, jwtToken?: string): Promise<MCPToolResult> {
+    return await this.callNeptuneTool({
+      name: 'neptune_verify_dns_propagation',
+      arguments: {
+        domain,
+        record_type: recordType,
+        expected_value: expectedValue,
+        workspace_id: workspaceId,
+        user_id: userId,
+        jwt_token: jwtToken
+      }
+    }, jwtToken)
+  }
+
+  /**
+   * Analyze repository using Mercury MCP tools
+   */
+  async analyzeRepository(repositoryUrl: string, workspaceId: string, userId: string, jwtToken?: string, forceRefresh = false, deepAnalysis = true): Promise<MCPToolResult> {
+    return await this.callMercuryTool({
+      name: 'mercury_analyze_repository',
+      arguments: {
+        repository_url: repositoryUrl,
+        workspace_id: workspaceId,
+        user_id: userId,
+        jwt_token: jwtToken,
+        force_refresh: forceRefresh,
+        deep_analysis: deepAnalysis
+      }
+    }, jwtToken)
+  }
+
+  /**
+   * Generate deployment plan using Mercury MCP tools
+   */
+  async generateDeploymentPlan(repositoryUrl: string, workspaceId: string, userId: string, jwtToken?: string, options: any = {}): Promise<MCPToolResult> {
+    return await this.callMercuryTool({
+      name: 'mercury_generate_deployment_plan',
+      arguments: {
+        repository_url: repositoryUrl,
+        workspace_id: workspaceId,
+        user_id: userId,
+        jwt_token: jwtToken,
+        target_environment: options.environment || 'production',
+        infrastructure_provider: options.provider || 'digitalocean',
+        budget_limit: options.budgetLimit,
+        performance_tier: options.performanceTier || 'standard'
+      }
+    }, jwtToken)
+  }
+
+  /**
+   * Estimate deployment cost using Mercury MCP tools
+   */
+  async estimateRepositoryDeploymentCost(repositoryUrl: string, workspaceId: string, userId: string, jwtToken?: string, options: any = {}): Promise<MCPToolResult> {
+    return await this.callMercuryTool({
+      name: 'mercury_estimate_deployment_cost',
+      arguments: {
+        repository_url: repositoryUrl,
+        workspace_id: workspaceId,
+        user_id: userId,
+        jwt_token: jwtToken,
+        infrastructure_provider: options.provider || 'digitalocean',
+        instance_type: options.instanceType,
+        duration_months: options.durationMonths || 1
+      }
+    }, jwtToken)
+  }
+
+  /**
+   * Detect security issues using Mercury MCP tools
+   */
+  async detectRepositorySecurityIssues(repositoryUrl: string, workspaceId: string, userId: string, jwtToken?: string, options: any = {}): Promise<MCPToolResult> {
+    return await this.callMercuryTool({
+      name: 'mercury_detect_security_issues',
+      arguments: {
+        repository_url: repositoryUrl,
+        workspace_id: workspaceId,
+        user_id: userId,
+        jwt_token: jwtToken,
+        include_dependencies: options.includeDependencies !== false,
+        severity_threshold: options.severityThreshold || 'moderate'
+      }
+    }, jwtToken)
+  }
+
+  /**
+   * Validate deployment configuration using Mercury MCP tools
+   */
+  async validateDeploymentConfiguration(repositoryUrl: string, deploymentConfig: any, workspaceId: string, userId: string, jwtToken?: string): Promise<MCPToolResult> {
+    return await this.callMercuryTool({
+      name: 'mercury_validate_deployment',
+      arguments: {
+        repository_url: repositoryUrl,
+        deployment_config: deploymentConfig,
+        workspace_id: workspaceId,
+        user_id: userId,
+        jwt_token: jwtToken
+      }
+    }, jwtToken)
+  }
+
+  /**
+   * Generate SSH key using Hermes MCP tools
+   */
+  async generateSSHKey(name: string, keyType: string, workspaceId: string, userId: string, jwtToken?: string, options: any = {}): Promise<MCPToolResult> {
+    return await this.callHermesTool({
+      name: 'hermes_generate_ssh_key',
+      arguments: {
+        name,
+        key_type: keyType,
+        key_size: options.keySize,
+        passphrase: options.passphrase,
+        purpose: options.purpose || 'deployment',
+        tags: options.tags || [],
+        expires_in: options.expiresIn,
+        workspace_id: workspaceId,
+        user_id: userId,
+        jwt_token: jwtToken
+      }
+    }, jwtToken)
+  }
+
+  /**
+   * Deploy SSH key to servers using Hermes MCP tools
+   */
+  async deploySSHKey(keyId: string, serverTargets: any[], workspaceId: string, userId: string, jwtToken?: string, options: any = {}): Promise<MCPToolResult> {
+    return await this.callHermesTool({
+      name: 'hermes_deploy_ssh_key',
+      arguments: {
+        key_id: keyId,
+        server_targets: serverTargets,
+        deployment_method: options.method || 'authorized_keys',
+        backup_existing: options.backupExisting !== false,
+        workspace_id: workspaceId,
+        user_id: userId,
+        jwt_token: jwtToken
+      }
+    }, jwtToken)
+  }
+
+  /**
+   * Establish SSH connection using Hermes MCP tools
+   */
+  async establishSSHConnection(keyId: string, host: string, username: string, workspaceId: string, userId: string, jwtToken?: string, options: any = {}): Promise<MCPToolResult> {
+    return await this.callHermesTool({
+      name: 'hermes_establish_ssh_connection',
+      arguments: {
+        key_id: keyId,
+        host,
+        port: options.port || 22,
+        username,
+        timeout: options.timeout || 10000,
+        server_name: options.serverName,
+        keep_alive: options.keepAlive !== false,
+        workspace_id: workspaceId,
+        user_id: userId,
+        jwt_token: jwtToken
+      }
+    }, jwtToken)
+  }
+
+  /**
+   * Execute SSH command using Hermes MCP tools
+   */
+  async executeSSHCommand(command: string, workspaceId: string, userId: string, jwtToken?: string, options: any = {}): Promise<MCPToolResult> {
+    return await this.callHermesTool({
+      name: 'hermes_execute_ssh_command',
+      arguments: {
+        connection_id: options.connectionId,
+        key_id: options.keyId,
+        host: options.host,
+        command,
+        working_directory: options.workingDirectory,
+        timeout: options.timeout || 30000,
+        environment: options.environment,
+        sudo: options.sudo || false,
+        stdin: options.stdin,
+        workspace_id: workspaceId,
+        user_id: userId,
+        jwt_token: jwtToken
+      }
+    }, jwtToken)
+  }
+
+  /**
+   * Audit SSH keys using Hermes MCP tools
+   */
+  async auditSSHKeys(workspaceId: string, userId: string, jwtToken?: string, options: any = {}): Promise<MCPToolResult> {
+    return await this.callHermesTool({
+      name: 'hermes_audit_ssh_keys',
+      arguments: {
+        key_ids: options.keyIds,
+        include_servers: options.includeServers !== false,
+        include_usage_stats: options.includeUsageStats !== false,
+        check_compromised: options.checkCompromised !== false,
+        workspace_id: workspaceId,
+        user_id: userId,
+        jwt_token: jwtToken
+      }
+    }, jwtToken)
+  }
+
+  /**
+   * Rotate SSH key using Hermes MCP tools
+   */
+  async rotateSSHKey(keyId: string, workspaceId: string, userId: string, jwtToken?: string, options: any = {}): Promise<MCPToolResult> {
+    return await this.callHermesTool({
+      name: 'hermes_rotate_ssh_key',
+      arguments: {
+        key_id: keyId,
+        new_key_name: options.newKeyName,
+        maintain_old_key: options.maintainOldKey || false,
+        rollback_period: options.rollbackPeriod || 7,
+        auto_deploy: options.autoDeploy !== false,
+        workspace_id: workspaceId,
+        user_id: userId,
+        jwt_token: jwtToken
+      }
+    }, jwtToken)
+  }
+
+  /**
    * Batch call multiple MCP tools across services
    */
-  async batchCall(calls: Array<{ service: 'atlas' | 'context', toolCall: MCPToolCall }>, jwtToken?: string): Promise<MCPToolResult[]> {
+  async batchCall(calls: Array<{ service: 'atlas' | 'context' | 'neptune' | 'mercury' | 'hermes', toolCall: MCPToolCall }>, jwtToken?: string): Promise<MCPToolResult[]> {
     const promises = calls.map(async ({ service, toolCall }) => {
       if (service === 'atlas') {
         return await this.callAtlasTool(toolCall, jwtToken)
-      } else {
+      } else if (service === 'context') {
         return await this.callContextTool(toolCall, jwtToken)
+      } else if (service === 'neptune') {
+        return await this.callNeptuneTool(toolCall, jwtToken)
+      } else if (service === 'mercury') {
+        return await this.callMercuryTool(toolCall, jwtToken)
+      } else {
+        return await this.callHermesTool(toolCall, jwtToken)
       }
     })
 

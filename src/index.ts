@@ -15,6 +15,9 @@ const config: WatsonConfig = {
   
   context_manager_url: process.env.CONTEXT_MANAGER_URL || 'http://localhost:3005',
   atlas_url: process.env.ATLAS_URL || 'http://localhost:3003',
+  neptune_url: process.env.NEPTUNE_URL || 'http://localhost:3006',
+  mercury_url: process.env.MERCURY_URL || 'http://localhost:3007',
+  hermes_url: process.env.HERMES_URL || 'http://localhost:3008',
   phoenix_url: process.env.PHOENIX_URL,
   sherlock_url: process.env.SHERLOCK_URL,
   

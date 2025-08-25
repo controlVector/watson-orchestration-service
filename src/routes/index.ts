@@ -13,6 +13,7 @@ import {
   getNotificationStats,
   healthCheck
 } from '../controllers/ConversationController'
+import { statusRoutes } from './status'
 import { WatsonConfig } from '../types'
 
 export async function registerRoutes(fastify: FastifyInstance, config: WatsonConfig) {
@@ -57,6 +58,9 @@ export async function registerRoutes(fastify: FastifyInstance, config: WatsonCon
   fastify.get('/api/notifications/stats', {
     handler: getNotificationStats.bind(controller)
   })
+
+  // Register status routes for error monitoring and deployment health
+  await statusRoutes(fastify, config)
 
   if (config.enable_websockets) {
     await fastify.register(require('@fastify/websocket'))
