@@ -13,7 +13,7 @@ const config: WatsonConfig = {
   host: process.env.HOST || '0.0.0.0',
   log_level: process.env.LOG_LEVEL || 'info',
   
-  context_manager_url: process.env.CONTEXT_MANAGER_URL || 'http://localhost:3005',
+  context_manager_url: process.env.CONTEXT_MANAGER_URL || 'http://localhost:3002',
   atlas_url: process.env.ATLAS_URL || 'http://localhost:3003',
   neptune_url: process.env.NEPTUNE_URL || 'http://localhost:3006',
   mercury_url: process.env.MERCURY_URL || 'http://localhost:3007',
@@ -69,9 +69,22 @@ async function start() {
     })
 
     server.addHook('preHandler', async (request, reply) => {
-      const publicPaths = ['/health', '/ws']
+      const publicPaths = ['/health', '/ws', '/test']
+      const publicPrefixes = ['/api/v1/deploy', '/api/v1/unified']
+      const requestPath = request.routeOptions.url || ''
       
-      if (publicPaths.includes(request.routeOptions.url || '')) {
+      if (publicPaths.includes(requestPath) || publicPrefixes.some(prefix => requestPath.startsWith(prefix))) {
+        return
+      }
+
+      // Development mode: bypass JWT authentication
+      if (process.env.NODE_ENV === 'development' && process.env.BYPASS_AUTH === 'true') {
+        // Inject a default user for development
+        (request as any).user = {
+          user_id: 'dev-user-123',
+          workspace_id: 'dev-workspace-456',
+          email: 'dev@controlvector.io'
+        }
         return
       }
 
@@ -138,4 +151,6 @@ process.on('SIGTERM', async () => {
   }
 })
 
-start()// trigger restart
+start()
+
+

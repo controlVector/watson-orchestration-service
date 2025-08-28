@@ -388,7 +388,7 @@ export class StatusMonitoringService extends EventEmitter {
   }
 
   private async performHealthChecks(): Promise<void> {
-    for (const [deploymentId, status] of this.deploymentStatuses) {
+    for (const [deploymentId, status] of Array.from(this.deploymentStatuses.entries())) {
       if (status.phase === 'completed' || status.phase === 'failed') {
         continue
       }
@@ -458,7 +458,7 @@ export class StatusMonitoringService extends EventEmitter {
     const candidates: ZombieServerCandidate[] = []
     const now = Date.now()
     
-    for (const [deploymentId, status] of this.deploymentStatuses) {
+    for (const [deploymentId, status] of Array.from(this.deploymentStatuses.entries())) {
       // Check for failed deployments with running infrastructure
       if (status.phase === 'failed' && status.infrastructure.length > 0) {
         const timeSinceFailure = now - status.lastUpdated.getTime()

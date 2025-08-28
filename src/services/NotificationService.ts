@@ -177,6 +177,55 @@ export class NotificationService extends EventEmitter {
   }
 
   /**
+   * Send error notification from Atlas service
+   */
+  sendErrorNotification(error: {
+    type: 'error' | 'warning' | 'recovery_needed'
+    service: string
+    error: {
+      timestamp: string
+      service: string
+      operation: string
+      level: 'warn' | 'error' | 'fatal'
+      message: string
+      error?: any
+      context: {
+        workspace_id?: string
+        user_id?: string
+        request_id?: string
+        session_id?: string
+      }
+      suggestions?: string[]
+      recovery_actions?: string[]
+    }
+    recovery_suggestions: string[]
+    user_visible: boolean
+  }, conversationId?: string): void {
+    this.sendEvent({
+      type: 'infrastructure.error',
+      conversation_id: conversationId || error.error.context.session_id || 'system',
+      data: {
+        error_type: error.type,
+        source_service: error.service,
+        operation: error.error.operation,
+        level: error.error.level,
+        error_message: error.error.message,
+        user_message: error.error.error?.userMessage || error.error.message,
+        suggestions: error.error.suggestions || [],
+        recovery_actions: error.recovery_suggestions,
+        context: error.error.context,
+        user_visible: error.user_visible,
+        timestamp: error.error.timestamp,
+        technical_details: {
+          error_code: error.error.error?.code,
+          stack: error.error.error?.stack,
+          metadata: error.error.error?.metadata
+        }
+      }
+    })
+  }
+
+  /**
    * Get event history for a conversation
    */
   getConversationHistory(conversationId: string, limit = 50): WatsonEvent[] {

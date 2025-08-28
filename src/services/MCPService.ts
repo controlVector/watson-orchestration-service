@@ -34,6 +34,7 @@ export class MCPService {
   private neptuneClient: any
   private mercuryClient: any
   private hermesClient: any
+  private phoenixClient: any
 
   constructor(config: WatsonConfig) {
     this.config = config
@@ -65,6 +66,12 @@ export class MCPService {
 
     this.hermesClient = axios.create({
       baseURL: `${config.hermes_url || 'http://localhost:3008'}/api/v1/mcp`,
+      timeout: 30000,
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+    this.phoenixClient = axios.create({
+      baseURL: `${config.phoenix_url || 'http://localhost:3009'}/api/v1/mcp`,
       timeout: 30000,
       headers: { 'Content-Type': 'application/json' }
     })
@@ -131,6 +138,19 @@ export class MCPService {
       return response.data.tools || []
     } catch (error) {
       console.error('[MCP] Failed to get Hermes tools:', error)
+      return []
+    }
+  }
+
+  /**
+   * Get available MCP tools from Phoenix deployment execution service
+   */
+  async getPhoenixTools(): Promise<MCPTool[]> {
+    try {
+      const response = await this.phoenixClient.get('/tools')
+      return response.data.tools || []
+    } catch (error) {
+      console.error('[MCP] Failed to get Phoenix tools:', error)
       return []
     }
   }
@@ -277,6 +297,68 @@ export class MCPService {
       }
     } catch (error: any) {
       console.error(`[MCP] Hermes tool call failed:`, error.response?.data || error.message)
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Unknown error',
+        tool_name: toolCall.name
+      }
+    }
+  }
+
+  /**
+   * Call a Phoenix deployment MCP tool
+   */
+  async callPhoenix(toolName: string, args: any, jwtToken?: string): Promise<MCPToolResult> {
+    const toolCall: MCPToolCall = { name: toolName, arguments: args }
+    
+    try {
+      const headers: any = { 'Content-Type': 'application/json' }
+      if (jwtToken) {
+        headers.Authorization = `Bearer ${jwtToken}`
+      }
+
+      console.log(`[MCP] Calling Phoenix deployment tool: ${toolCall.name}`)
+      const response = await this.phoenixClient.post('/call', toolCall, { headers })
+      
+      return {
+        success: response.data.success || false,
+        result: response.data.result,
+        error: response.data.error,
+        tool_name: toolCall.name,
+        execution_time: response.data.execution_time
+      }
+    } catch (error: any) {
+      console.error(`[MCP] Phoenix tool call failed:`, error.response?.data || error.message)
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Unknown error',
+        tool_name: toolCall.name
+      }
+    }
+  }
+
+  /**
+   * Call a Phoenix deployment MCP tool (standardized interface)
+   */
+  async callPhoenixTool(toolCall: MCPToolCall, jwtToken?: string): Promise<MCPToolResult> {
+    try {
+      const headers: any = { 'Content-Type': 'application/json' }
+      if (jwtToken) {
+        headers.Authorization = `Bearer ${jwtToken}`
+      }
+
+      console.log(`[MCP] Calling Phoenix deployment tool: ${toolCall.name}`)
+      const response = await this.phoenixClient.post('/call', toolCall, { headers })
+      
+      return {
+        success: response.data.success || false,
+        result: response.data.result,
+        error: response.data.error,
+        tool_name: toolCall.name,
+        execution_time: response.data.execution_time
+      }
+    } catch (error: any) {
+      console.error(`[MCP] Phoenix tool call failed:`, error.response?.data || error.message)
       return {
         success: false,
         error: error.response?.data?.message || error.message || 'Unknown error',
@@ -672,4 +754,76 @@ export class MCPService {
 
     return await Promise.all(promises)
   }
+
+  /**
+   * Generic method to call Atlas tools by name (for backward compatibility)
+   */
+  async callAtlas(toolName: string, args: any, jwtToken?: string): Promise<MCPToolResult> {
+    // Map prefixed tool names to actual Atlas MCP tool names
+    const toolMapping: Record<string, string> = {
+      'atlas_provision_infrastructure': 'provision_infrastructure',
+      'atlas_get_infrastructure_overview': 'get_infrastructure_overview',
+      'atlas_get_infrastructure_costs': 'get_infrastructure_costs',
+      'atlas_estimate_infrastructure_cost': 'estimate_infrastructure_cost',
+      'atlas_scale_infrastructure_resource': 'scale_infrastructure_resource',
+      'atlas_get_provider_status': 'get_provider_status',
+      'atlas_destroy_infrastructure': 'destroy_infrastructure'
+    }
+
+    const actualToolName = toolMapping[toolName] || toolName
+
+    return await this.callAtlasTool({
+      name: actualToolName,
+      arguments: args
+    }, jwtToken)
+  }
+
+  /**
+   * Generic method to call Mercury tools by name (for backward compatibility)
+   */
+  async callMercury(toolName: string, args: any, jwtToken?: string): Promise<MCPToolResult> {
+    const toolMapping: Record<string, string> = {
+      'mercury_analyze_repository': 'mercury_analyze_repository'
+    }
+
+    const actualToolName = toolMapping[toolName] || toolName
+
+    return await this.callMercuryTool({
+      name: actualToolName,
+      arguments: args
+    }, jwtToken)
+  }
+
+  /**
+   * Generic method to call Neptune tools by name (for backward compatibility)
+   */
+  async callNeptune(toolName: string, args: any, jwtToken?: string): Promise<MCPToolResult> {
+    const toolMapping: Record<string, string> = {
+      'neptune_create_dns_record': 'neptune_create_dns_record'
+    }
+
+    const actualToolName = toolMapping[toolName] || toolName
+
+    return await this.callNeptuneTool({
+      name: actualToolName,
+      arguments: args
+    }, jwtToken)
+  }
+
+  /**
+   * Generic method to call Hermes tools by name (for backward compatibility)
+   */
+  async callHermes(toolName: string, args: any, jwtToken?: string): Promise<MCPToolResult> {
+    const toolMapping: Record<string, string> = {
+      'hermes_generate_ssh_key': 'hermes_generate_ssh_key'
+    }
+
+    const actualToolName = toolMapping[toolName] || toolName
+
+    return await this.callHermesTool({
+      name: actualToolName,
+      arguments: args
+    }, jwtToken)
+  }
+
 }

@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
 import { ConversationService } from '../services/ConversationService'
+import { NotificationService } from '../services/NotificationService'
 import { WatsonConfig } from '../types'
 import { z } from 'zod'
 
@@ -22,12 +23,16 @@ const GetConversationsSchema = z.object({
 
 interface ConversationController {
   conversationService: ConversationService
+  notificationService: NotificationService
 }
 
 export function createConversationController(config: WatsonConfig): ConversationController {
   const conversationService = new ConversationService(config)
   
-  return { conversationService }
+  return { 
+    conversationService,
+    notificationService: conversationService.getNotificationService()
+  }
 }
 
 export async function createConversation(
@@ -72,9 +77,16 @@ export async function sendMessage(
   try {
     const body = SendMessageSchema.parse(request.body)
     
+    // Extract JWT token from Authorization header
+    const authHeader = request.headers.authorization
+    const jwtToken = authHeader && authHeader.startsWith('Bearer ') 
+      ? authHeader.substring(7) 
+      : undefined
+    
     const response = await this.conversationService.processMessage(
       body.conversation_id,
-      body.message
+      body.message,
+      jwtToken
     )
 
     reply.send({

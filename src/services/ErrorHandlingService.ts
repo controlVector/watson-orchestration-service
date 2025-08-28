@@ -208,7 +208,7 @@ export class ErrorHandlingService {
   }
 
   private classifyError(errorMessage: string): { type: ErrorType; severity: ErrorSeverity } {
-    for (const [signature, pattern] of this.errorPatterns) {
+    for (const [signature, pattern] of Array.from(this.errorPatterns.entries())) {
       if (errorMessage.includes(signature)) {
         return { type: pattern.type, severity: pattern.severity }
       }
@@ -435,7 +435,7 @@ Format response as JSON with the structure: {rootCause, confidence, reasoning, r
   }
 
   private findMatchingPattern(message: string): ErrorPattern | undefined {
-    for (const [signature, pattern] of this.errorPatterns) {
+    for (const [signature, pattern] of Array.from(this.errorPatterns.entries())) {
       if (message.includes(signature)) {
         return pattern
       }
@@ -573,6 +573,128 @@ Format response as JSON with the structure: {rootCause, confidence, reasoning, r
     }, 0)
 
     return totalTime / resolvedErrors.length / 1000 / 60 // Convert to minutes
+  }
+
+  /**
+   * Diagnose error and return analysis
+   * Used by Watson MCP tools for troubleshooting workflows  
+   */
+  async diagnoseError(issueDescription: string, context: any, jwtToken: string): Promise<{
+    errorType: string
+    confidence: number
+    rootCause: string
+    affectedResources: any[]
+    severity: string
+    estimatedResolutionTime: number
+    context: any
+    recommendations?: string[]
+  }> {
+    console.log(`[ErrorHandlingService] Diagnosing error: ${issueDescription}`)
+
+    // Use AI analysis if possible, or fallback to pattern matching
+    try {
+      // Create deployment error for analysis
+      const deploymentError: DeploymentError = {
+        id: `diagnose-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`,
+        type: 'infrastructure_provisioning_error',
+        service: 'watson',
+        message: issueDescription,
+        context: context,
+        timestamp: new Date(),
+        resolved: false,
+        severity: 'medium',
+        phase: 'repository_analysis',
+        recoveryAttempts: []
+      }
+
+      // Perform AI analysis using existing infrastructure
+      const aiAnalysis = await this.performAIAnalysis(deploymentError)
+
+      return {
+        errorType: deploymentError.type,
+        confidence: aiAnalysis.confidence,
+        rootCause: aiAnalysis.rootCause || issueDescription,
+        affectedResources: context.affectedResources || [],
+        severity: deploymentError.severity,
+        estimatedResolutionTime: aiAnalysis.estimatedRepairTime,
+        context: context,
+        recommendations: aiAnalysis.recommendedActions?.map(action => action.description) || []
+      }
+
+    } catch (error: any) {
+      console.error('[ErrorHandlingService] Error during diagnosis:', error)
+      
+      // Fallback to basic analysis
+      return {
+        errorType: 'infrastructure_provisioning_error',
+        confidence: 0.5,
+        rootCause: issueDescription,
+        affectedResources: context.affectedResources || [],
+        severity: 'medium',
+        estimatedResolutionTime: 30,
+        context: context
+      }
+    }
+  }
+
+  /**
+   * Resolve error using specified error type and context
+   * Used by Watson MCP tools for troubleshooting workflows
+   */
+  async resolveError(errorType: string, context: any, jwtToken: string): Promise<{
+    success: boolean
+    actionsApplied?: number
+    message: string
+    details: string[]
+  }> {
+    console.log(`[ErrorHandlingService] Resolving error type: ${errorType}`)
+
+    try {
+      // Create a deployment error object to use existing infrastructure  
+      const deploymentError: DeploymentError = {
+        id: `resolve-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`,
+        type: errorType as ErrorType,
+        service: 'watson',
+        message: `Error resolution request: ${errorType}`,
+        context: context,
+        timestamp: new Date(),
+        resolved: false,
+        severity: 'medium',
+        phase: 'health_verification',
+        recoveryAttempts: []
+      }
+
+      // Add to active errors
+      this.activeErrors.set(deploymentError.id, deploymentError)
+
+      // Attempt recovery using existing infrastructure
+      await this.attemptRecovery(deploymentError)
+
+      // Check if resolution was successful
+      const resolvedError = this.activeErrors.get(deploymentError.id)
+      if (resolvedError?.resolved) {
+        return {
+          success: true,
+          actionsApplied: resolvedError.recoveryAttempts.length,
+          message: 'Error resolved successfully',
+          details: resolvedError.recoveryAttempts.map(attempt => attempt.outcome)
+        }
+      } else {
+        return {
+          success: false,
+          message: 'Error resolution failed',
+          details: resolvedError?.recoveryAttempts.map(attempt => attempt.outcome) || []
+        }
+      }
+
+    } catch (error: any) {
+      console.error('[ErrorHandlingService] Error during resolution:', error)
+      return {
+        success: false,
+        message: `Error resolution failed: ${error.message}`,
+        details: [error.message]
+      }
+    }
   }
 }
 

@@ -423,6 +423,9 @@ export interface WatsonResponse {
   
   // User interface hints
   ui_hints?: UIHint[]
+  
+  // Error recovery tracking
+  recovery_id?: string
 }
 
 export type ResponseType =
@@ -434,6 +437,7 @@ export type ResponseType =
   | 'workflow_complete'    // Workflow completion
   | 'error'               // Error message
   | 'question'            // Asking for clarification
+  | 'recovery_started'    // Error recovery initiated
 
 export interface ResponseAttachment {
   type: 'cost_breakdown' | 'infrastructure_diagram' | 'progress_chart' | 'log_output'
@@ -521,6 +525,7 @@ export type WatsonEventType =
   | 'workflow.completed'
   | 'workflow.failed'
   | 'infrastructure.status_change'
+  | 'infrastructure.error'
   | 'cost.alert'
   | 'approval.required'
 

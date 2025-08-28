@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { EventEmitter } from 'events'
 import { MCPService } from './MCPService'
 import { ErrorHandlingService, DeploymentError } from './ErrorHandlingService'
-import { StatusMonitoringService } from './StatusMonitoringService'
+import { StatusMonitoringService, DeploymentPhase } from './StatusMonitoringService'
 import { LLMService } from './LLMService'
 import { Intent, DeploymentRequirement } from '../types'
 
@@ -253,11 +253,11 @@ export class DeploymentOrchestrator extends EventEmitter {
         await this.statusMonitoringService.updateDeploymentPhase(
           execution.id,
           'completed',
-          `Deployment completed successfully - ${healthResult.monitoring?.status}`,
+          `Deployment completed successfully - ${healthResult.result?.status || 'healthy'}`,
           100
         )
 
-        return `Health verification passed: ${healthResult.monitoring?.status}`
+        return `Health verification passed: ${healthResult.result?.status || 'healthy'}`
       })
 
       // Mark as completed
@@ -308,10 +308,22 @@ export class DeploymentOrchestrator extends EventEmitter {
       execution.remainingSteps = execution.remainingSteps.filter(s => s.phase !== phase)
       execution.progress = Math.round((execution.completedSteps.length / (execution.completedSteps.length + execution.remainingSteps.length)) * 100)
 
-      // Update status monitoring
+      // Update status monitoring - map ExecutionPhase to DeploymentPhase
+      const deploymentPhaseMap: Record<ExecutionPhase, DeploymentPhase> = {
+        'initializing': 'initializing',
+        'analyzing_repository': 'analyzing_repository',
+        'provisioning_infrastructure': 'provisioning_infrastructure',
+        'generating_ssh_keys': 'configuring_ssh',
+        'executing_deployment': 'deploying_application',
+        'verifying_health': 'running_health_checks',
+        'completed': 'completed',
+        'failed': 'failed',
+        'recovering': 'failed'
+      }
+      
       await this.statusMonitoringService.updateDeploymentPhase(
         execution.id,
-        phase,
+        deploymentPhaseMap[phase],
         execution.currentStep,
         execution.progress
       )
